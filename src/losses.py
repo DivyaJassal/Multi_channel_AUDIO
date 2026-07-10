@@ -89,3 +89,56 @@ def pit_si_sdr_loss(estimates, targets, max_brute_force=5):
             best_perm[b] = torch.tensor(col_ind, device=device)
             best_scores[b] = pairwise[b, row_ind, col_ind].mean()
         return -best_scores.mean(), best_scores.detach(), best_perm
+
+def pit_si_sdr_loss_variable(estimates, targets, active_counts, silence_weight=0.1):
+    """
+    This project's dataset always returns exactly `max_sources` channels,
+    zero-padding when a mixture has fewer real speakers. Plugging that
+    straight into pit_si_sdr_loss would compute SI-SDR against all-zero
+    "silence" targets, which is mathematically undefined (zero target
+    energy) and gives no useful gradient telling the model to actually
+    output silence there.
+
+    This version matches only the REAL speakers (targets[:active_count])
+    against the best-fitting subset of the model's output channels
+    (Hungarian algorithm), and separately pushes the leftover, unmatched
+    output channels toward silence with a simple energy penalty.
+
+    estimates:      (B, C, T) — C = max_sources, model's fixed output count
+    targets:        (B, C, T) — first active_counts[b] channels are real
+                    speakers, remaining channels are zero-padding
+    active_counts:  (B,) — real speaker count per example (this project's
+                    dataset returns this as sample["num_sources"])
+    """
+    B, C, T = estimates.shape
+    device = estimates.device
+
+    total_loss = 0.0
+    active_sisdr = torch.zeros(B, device=device)
+
+    for b in range(B):
+        c_active = int(active_counts[b].item())
+        active_targets = targets[b, :c_active]  # (c_active, T)
+
+        pairwise = torch.zeros(C, c_active, device=device)
+        for i in range(C):
+            for j in range(c_active):
+                pairwise[i, j] = si_sdr(estimates[b, i], active_targets[j])
+
+        cost = (-pairwise).detach().cpu().numpy()
+        row_ind, col_ind = linear_sum_assignment(cost)  # len = min(C, c_active)
+
+        matched_score = pairwise[row_ind, col_ind].mean()
+
+        matched_estimate_idx = set(row_ind.tolist())
+        unmatched_idx = [i for i in range(C) if i not in matched_estimate_idx]
+        if unmatched_idx:
+            unmatched_est = estimates[b, unmatched_idx]
+            silence_loss = (unmatched_est ** 2).mean()
+        else:
+            silence_loss = torch.tensor(0.0, device=device)
+
+        total_loss = total_loss + (-matched_score + silence_weight * silence_loss)
+        active_sisdr[b] = matched_score.detach()
+
+    return total_loss / B, active_sisdr

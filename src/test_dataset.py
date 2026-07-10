@@ -4,11 +4,15 @@ from config import load_config
 config = load_config()
 
 dataset = SpeechSeparationDataset(
-    root_dir="../conversational_dataset_v2",
+    root_dir=config["data_root"],
     split="train",
     sample_rate=config["sample_rate"],
     segment_seconds=config["segment_seconds"],
-    max_sources=config["max_sources"]
+    max_sources=config["max_sources"],
+    return_metadata=True,   
+                           
+                            
+                            
 )
 
 sample = dataset[0]
