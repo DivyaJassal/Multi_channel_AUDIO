@@ -1,6 +1,6 @@
 # --- data ---
 sample_rate: 16000
-segment_seconds: 4
+segment_seconds: 3
 max_sources: 4
 data_root: "../conversational_dataset_v2"
 
@@ -11,12 +11,8 @@ num_workers: 4
 shuffle: true
 
 # --- model ---
-# Shrunk down from the full paper-size Conv-TasNet (512/512/8/3) for
-# practical laptop training speed. Still a real, working separator —
-# just faster to train. Bump these back up later if you have time/compute
-# to spare and want to chase a few more dB of SI-SDR.
 enc_filters: 256
-enc_kernel_size: 32       # 32 for 16kHz audio, 16 for 8kHz
+enc_kernel_size: 32
 bottleneck_channels: 128
 hidden_channels: 256
 tcn_kernel_size: 3
@@ -24,9 +20,11 @@ num_blocks: 6
 num_repeats: 2
 
 # --- training ---
-epochs: 100
+epochs: 17
 lr: 0.001
 grad_clip_norm: 5.0
-silence_weight: 0.1       # weight of the silence penalty for padded/unmatched channels
+silence_weight: 0.1
+
 checkpoint_dir: "../checkpoints"
+
 seed: 0
